@@ -1,6 +1,6 @@
 {
   "name": "visualizer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@monaco-editor/react": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest",
