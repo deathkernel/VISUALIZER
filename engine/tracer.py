@@ -14,10 +14,11 @@ def safe_value(value):
 
 
 def snapshot(frame):
+    ignored = {"__name__", "__builtins__", "print"}
     return {
         k: safe_value(v)
         for k, v in frame.f_locals.items()
-        if not k.startswith("__")
+        if k not in ignored and not k.startswith("__") and not callable(v)
     }
 
 
@@ -25,12 +26,7 @@ def execute(code):
     try:
         tree = ast.parse(code, filename="main.py", mode="exec")
     except SyntaxError as exc:
-        return {
-            "ok": False,
-            "error": f"SyntaxError: {exc}",
-            "steps": [],
-            "output": "",
-        }
+        return {"ok": False, "error": f"SyntaxError: {exc}", "steps": [], "output": ""}
 
     steps = []
     output = io.StringIO()
@@ -42,13 +38,10 @@ def execute(code):
 
     def trace(frame, event, arg):
         nonlocal pending
-
         if frame.f_code.co_filename != "main.py":
             return trace
 
         if event == "line":
-            # The previous line has completed by the time Python emits
-            # the next line event, so capture its post-execution state.
             if pending is not None:
                 pending["variables"] = snapshot(frame)
 
@@ -63,7 +56,6 @@ def execute(code):
                 pending = None
 
         elif event == "return" and pending is not None:
-            # Capture the final executed line, which has no following line event.
             pending["variables"] = snapshot(frame)
             pending = None
 
