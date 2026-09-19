@@ -30,27 +30,47 @@ def execute(code):
         if frame.f_code.co_filename != "main.py":
             return trace
         if event == "line" and len(steps) < MAX_STEPS:
-            steps.append({"line": frame.f_lineno, "event": "Executing line", "variables": snapshot(frame)})
+            steps.append({
+                "line": frame.f_lineno,
+                "event": "Executing line",
+                "variables": snapshot(frame),
+            })
         return trace
 
-    old_trace, old_stdout, old_stderr = sys.gettrace(), sys.stdout, sys.stderr
+    old_trace = sys.gettrace()
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+
     try:
         compiled = compile(tree, "main.py", "exec")
+        namespace = {"__name__": "__main__"}
+
         sys.stdout = output
         sys.stderr = output
         sys.settrace(trace)
-        namespace = {"__name__": "__main__"}
         exec(compiled, namespace, namespace)
+
     except Exception as exc:
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "steps": steps, "output": output.getvalue()}
+        return {
+            "ok": False,
+            "error": f"{type(exc).__name__}: {exc}",
+            "steps": steps,
+            "output": output.getvalue(),
+        }
     finally:
         sys.settrace(old_trace)
         sys.stdout = old_stdout
         sys.stderr = old_stderr
 
-    return {"ok": True, "steps": steps, "output": output.getvalue(), "truncated": len(steps) >= MAX_STEPS}
+    return {
+        "ok": True,
+        "steps": steps,
+        "output": output.getvalue(),
+        "truncated": len(steps) >= MAX_STEPS,
+    }
 
 
 if __name__ == "__main__":
     payload = json.load(sys.stdin)
-    print(json.dumps(execute(payload.get("code", ""))))
+    result = execute(payload.get("code", ""))
+    print(json.dumps(result))
