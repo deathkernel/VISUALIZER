@@ -4,13 +4,28 @@ import { useEffect, useRef, useState } from "react";
 import Editor from "@monaco-editor/react";
 import { Play, RotateCcw, SkipForward, Terminal, Box, GitBranch, Braces, Zap, CircleDot } from "lucide-react";
 
-const defaultCode = `numbers = [5, 2, 8]
-total = 0
+const defaultCode = `numbers = [5, 2, 8]\ntotal = 0\n\nfor number in numbers:\n    total = total + number\n\nprint(total)`;
 
-for number in numbers:
-    total = total + number
+function VisualValue({ value }) {
+  const text = String(value);
+  const match = text.match(/^\[(.*)\]$/);
 
-print(total)`;
+  if (match) {
+    const items = match[1].trim() ? match[1].split(/,\s*/).map((item) => item.replace(/^['"]|['"]$/g, "")) : [];
+    return (
+      <div className="array-visual" aria-label={`Array with ${items.length} items`}>
+        {items.map((item, index) => (
+          <div className="array-node" key={`${item}-${index}`}>
+            <span className="array-index">{index}</span>
+            <strong>{item}</strong>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return <strong className="scalar-value">{text}</strong>;
+}
 
 export default function Home() {
   const [code, setCode] = useState(defaultCode);
@@ -52,9 +67,9 @@ export default function Home() {
         return;
       }
 
-      setSteps(data.steps || []);
-      setOutput(data.output || "");
-      setStatus(`Completed · ${data.steps?.length || 0} steps`);
+      setSteps(Array.isArray(data.steps) ? data.steps : []);
+      setOutput(typeof data.output === "string" ? data.output : String(data.output ?? ""));
+      setStatus(`Completed · ${Array.isArray(data.steps) ? data.steps.length : 0} steps`);
     } catch (e) {
       setError(e.message || "Could not connect to execution engine");
       setStatus("Connection error");
@@ -199,13 +214,27 @@ export default function Home() {
               <div className="event-text">{current.event}</div>
               <div className="event-line">{steps.length ? `Executing line ${current.line}` : "No execution yet"}</div>
             </div>
+
+            <div className="flow-strip">
+              <div className="flow-label">EXECUTION FLOW</div>
+              <div className="flow-track">
+                {steps.length ? steps.slice(0, 8).map((step, index) => (
+                  <div className={`flow-node ${index === stepIndex ? "active" : ""}`} key={`${step.line}-${index}`}>
+                    <span>{index + 1}</span>
+                    <small>line {step.line}</small>
+                  </div>
+                )) : <div className="flow-empty">Run code to see the execution path.</div>}
+                {steps.length > 8 && <div className="flow-more">+{steps.length - 8}</div>}
+              </div>
+            </div>
+
             <div className="array-card">
               <div className="card-label">EXECUTION STATE</div>
               <div className="state-grid">
                 {Object.entries(current.variables || {}).length ? Object.entries(current.variables).map(([key, value]) => (
                   <div className="state-item" key={key}>
                     <span>{key}</span>
-                    <strong>{String(value)}</strong>
+                    <VisualValue value={value} />
                   </div>
                 )) : <div className="empty-state">Press Run to generate real execution states.</div>}
               </div>
@@ -220,7 +249,7 @@ export default function Home() {
               {Object.entries(current.variables || {}).map(([key, value]) => (
                 <div className="variable-row" key={key}>
                   <div className="variable-name">{key}</div>
-                  <div className="variable-value">{String(value)}</div>
+                  <div className="variable-value"><VisualValue value={value} /></div>
                 </div>
               ))}
               {!Object.keys(current.variables || {}).length && <div className="muted-note">Variables appear here after execution.</div>}
