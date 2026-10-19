@@ -1,274 +1,31 @@
 "use client";
-
-import { useEffect, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
-import { Play, RotateCcw, SkipForward, Terminal, Box, GitBranch, Braces, Zap, CircleDot } from "lucide-react";
-
-const defaultCode = `numbers = [5, 2, 8]\ntotal = 0\n\nfor number in numbers:\n    total = total + number\n\nprint(total)`;
-
-function VisualValue({ value }) {
-  const text = String(value);
-  const match = text.match(/^\[(.*)\]$/);
-
-  if (match) {
-    const items = match[1].trim() ? match[1].split(/,\s*/).map((item) => item.replace(/^['"]|['"]$/g, "")) : [];
-    return (
-      <div className="array-visual" aria-label={`Array with ${items.length} items`}>
-        {items.map((item, index) => (
-          <div className="array-node" key={`${item}-${index}`}>
-            <span className="array-index">{index}</span>
-            <strong>{item}</strong>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return <strong className="scalar-value">{text}</strong>;
-}
-
-export default function Home() {
-  const [code, setCode] = useState(defaultCode);
-  const [steps, setSteps] = useState([]);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState("Ready");
-  const [output, setOutput] = useState("");
-  const [error, setError] = useState("");
-  const editorRef = useRef(null);
-  const monacoRef = useRef(null);
-  const decorationRef = useRef([]);
-
-  const current = steps[stepIndex] || {
-    line: 1,
-    event: "Run your code to create execution steps",
-    variables: {},
-  };
-
-  async function runCode() {
-    setRunning(true);
-    setStatus("Executing…");
-    setError("");
-    setSteps([]);
-    setStepIndex(0);
-    setOutput("");
-
-    try {
-      const response = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = await response.json();
-
-      if (!data.ok) {
-        setError(data.error || "Execution failed");
-        setStatus("Error");
-        return;
-      }
-
-      setSteps(Array.isArray(data.steps) ? data.steps : []);
-      setOutput(typeof data.output === "string" ? data.output : String(data.output ?? ""));
-      setStatus(`Completed · ${Array.isArray(data.steps) ? data.steps.length : 0} steps`);
-    } catch (e) {
-      setError(e.message || "Could not connect to execution engine");
-      setStatus("Connection error");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  function nextStep() {
-    if (steps.length) setStepIndex((i) => Math.min(i + 1, steps.length - 1));
-  }
-
-  function reset() {
-    setRunning(false);
-    setStepIndex(0);
-    setSteps([]);
-    setOutput("");
-    setError("");
-    setStatus("Ready");
-  }
-
-  function handleEditorMount(editor, monaco) {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    editor.addAction({
-      id: "visualizer-run-code",
-      label: "Run Visualizer Code",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: runCode,
-    });
-
-    editor.focus();
-  }
-
-  useEffect(() => {
-    if (!editorRef.current || !monacoRef.current || !steps.length) return;
-
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    const line = Math.max(1, current.line || 1);
-
-    decorationRef.current = editor.deltaDecorations(decorationRef.current, [
-      {
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: "execution-line",
-          glyphMarginClassName: "execution-glyph",
-        },
-      },
-    ]);
-
-    editor.revealLineInCenterIfOutsideViewport(line);
-  }, [current.line, steps.length]);
-
-  return (
-    <main className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark"><Zap size={17} /></div>
-          <div>
-            <div className="brand-name">VISUALIZER</div>
-            <div className="brand-tag">Write code. Watch it think.</div>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <span className="status-pill"><span className="status-dot" /> Python</span>
-          <button className="icon-button" onClick={reset} title="Reset"><RotateCcw size={17} /></button>
-        </div>
-      </header>
-
-      <section className="toolbar">
-        <button className="primary-button" onClick={runCode} disabled={running}>
-          <Play size={16} /> {running ? "Running…" : "Run"}
-        </button>
-        <button className="tool-button" onClick={nextStep} disabled={!steps.length}>
-          <SkipForward size={16} /> Step
-        </button>
-        <button className="tool-button" onClick={reset}>
-          <RotateCcw size={16} /> Reset
-        </button>
-        <div className="toolbar-spacer" />
-        <div className="step-counter">
-          {status}{steps.length ? ` · Step ${stepIndex + 1}/${steps.length}` : ""}
-        </div>
-      </section>
-
-      <section className="workspace">
-        <aside className="editor-panel panel">
-          <div className="panel-header">
-            <div className="panel-title"><Braces size={15} /> Code</div>
-            <span className="tiny-label">PYTHON</span>
-          </div>
-
-          <div className="monaco-editor-wrap">
-            <Editor
-              height="100%"
-              language="python"
-              theme="vs-dark"
-              value={code}
-              onChange={(value) => setCode(value ?? "")}
-              onMount={handleEditorMount}
-              options={{
-                automaticLayout: true,
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineHeight: 21,
-                lineNumbers: "on",
-                glyphMargin: true,
-                folding: true,
-                tabSize: 4,
-                insertSpaces: true,
-                wordWrap: "off",
-                scrollBeyondLastLine: false,
-                smoothScrolling: true,
-                padding: { top: 12, bottom: 12 },
-                renderWhitespace: "selection",
-                bracketPairColorization: { enabled: true },
-                suggestOnTriggerCharacters: true,
-                quickSuggestions: true,
-                cursorBlinking: "smooth",
-                contextmenu: true,
-              }}
-            />
-          </div>
-
-          <div className="editor-footer">
-            <span>UTF-8</span>
-            <span>Python 3 · Ctrl+Enter to Run</span>
-          </div>
-        </aside>
-
-        <section className="visual-panel panel">
-          <div className="panel-header">
-            <div className="panel-title"><GitBranch size={15} /> Live Visualization</div>
-            <span className="live-pill"><CircleDot size={12} /> {running ? "RUNNING" : "LIVE"}</span>
-          </div>
-          <div className="visual-canvas">
-            <div className="event-banner">
-              <div className="event-kicker">CURRENT EVENT</div>
-              <div className="event-text">{current.event}</div>
-              <div className="event-line">{steps.length ? `Executing line ${current.line}` : "No execution yet"}</div>
-            </div>
-
-            <div className="flow-strip">
-              <div className="flow-label">EXECUTION FLOW</div>
-              <div className="flow-track">
-                {steps.length ? steps.slice(0, 8).map((step, index) => (
-                  <div className={`flow-node ${index === stepIndex ? "active" : ""}`} key={`${step.line}-${index}`}>
-                    <span>{index + 1}</span>
-                    <small>line {step.line}</small>
-                  </div>
-                )) : <div className="flow-empty">Run code to see the execution path.</div>}
-                {steps.length > 8 && <div className="flow-more">+{steps.length - 8}</div>}
-              </div>
-            </div>
-
-            <div className="array-card">
-              <div className="card-label">EXECUTION STATE</div>
-              <div className="state-grid">
-                {Object.entries(current.variables || {}).length ? Object.entries(current.variables).map(([key, value]) => (
-                  <div className="state-item" key={key}>
-                    <span>{key}</span>
-                    <VisualValue value={value} />
-                  </div>
-                )) : <div className="empty-state">Press Run to generate real execution states.</div>}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <aside className="inspector">
-          <div className="panel panel-grow">
-            <div className="panel-header"><div className="panel-title"><Box size={15} /> Variables</div></div>
-            <div className="variable-list">
-              {Object.entries(current.variables || {}).map(([key, value]) => (
-                <div className="variable-row" key={key}>
-                  <div className="variable-name">{key}</div>
-                  <div className="variable-value"><VisualValue value={value} /></div>
-                </div>
-              ))}
-              {!Object.keys(current.variables || {}).length && <div className="muted-note">Variables appear here after execution.</div>}
-            </div>
-          </div>
-          <div className="panel console-panel">
-            <div className="panel-header"><div className="panel-title"><Terminal size={15} /> Console</div></div>
-            <div className="console-body">
-              <div><span className="prompt">&gt;</span> python main.py</div>
-              {error ? <div className="error-result">{error}</div> : <div className="console-result">{output || "_"}</div>}
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      <footer className="footer">
-        <span>Visualizer V3 · Monaco Python Editor</span>
-        <span>5s execution limit</span>
-      </footer>
-    </main>
-  );
-}
+import { useMemo, useState } from "react";
+import { Activity, GitBranch, Divide, FunctionSquare, Shapes, Sigma, Sparkles, RotateCcw, Plus, Minus, CircleHelp } from "lucide-react";
+const topics=[{id:"arithmetic",label:"Number Line",Icon:GitBranch},{id:"multiply",label:"Multiplication",Icon:Sigma},{id:"divide",label:"Division",Icon:Divide},{id:"algebra",label:"Algebra Graph",Icon:FunctionSquare},{id:"geometry",label:"Geometry",Icon:Shapes}];
+function NumberInput({label,value,onChange,min,max,step=1}){return <label className="number-field"><span>{label}</span><div className="number-control"><button type="button" onClick={()=>onChange(Math.max(min,Math.round((value-step)*100)/100))} aria-label={"Decrease "+label}>−</button><input type="number" min={min} max={max} step={step} value={value} onChange={e=>{const n=Number(e.target.value);if(e.target.value!==""&&Number.isFinite(n))onChange(Math.max(min,Math.min(max,n)));}}/><button type="button" onClick={()=>onChange(Math.min(max,Math.round((value+step)*100)/100))} aria-label={"Increase "+label}>+</button></div></label>}
+function NumberLine({a,b,op,result}){const low=Math.min(0,a,result)-2,high=Math.max(0,a,result)+2,span=high-low||1,x=n=>32+(n-low)/span*736,ticks=Array.from({length:Math.min(31,high-low+1)},(_,i)=>low+i);return <svg viewBox="0 0 800 230" className="chart-svg" role="img" aria-label={"Number line: "+a+" "+op+" "+b+" = "+result}><line x1="32" y1="126" x2="768" y2="126" className="axis-line"/>{ticks.map(n=><g key={n}><line x1={x(n)} y1="118" x2={x(n)} y2="135" className="tick-line"/><text x={x(n)} y="154" className="axis-label" textAnchor="middle">{n}</text></g>)}<path d={"M "+x(a)+" 94 Q "+((x(a)+x(result))/2)+" 25 "+x(result)+" 94"} className="move-arc"/><circle cx={x(a)} cy="126" r="8" className="start-dot"/><circle cx={x(result)} cy="126" r="9" className="result-dot"/><text x={x(a)} y="82" className="point-label" textAnchor="middle">Start {a}</text><text x={x(result)} y="180" className="point-label" textAnchor="middle">Answer {result}</text><text x="400" y="214" className="plot-caption" textAnchor="middle">{op==="+"?"Move right to add a positive number":"Move left to subtract a positive number"}</text></svg>}
+function DotArray({rows,cols}){const dots=[];for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)dots.push(<g key={r+"-"+c}><circle cx={45+c*44} cy={35+r*42} r="13" className="array-dot"/><text x={45+c*44} y={39+r*42} className="dot-number" textAnchor="middle">{c+1}</text></g>);return <svg viewBox={"0 0 "+Math.max(240,90+cols*44)+" "+Math.max(130,70+rows*42)} className="chart-svg" role="img" aria-label={rows+" rows by "+cols+" columns"}>{dots}</svg>}
+function DivisionVisual({total,groups}){const each=Math.floor(total/groups),remainder=total%groups;return <svg viewBox={"0 0 600 "+Math.max(90,24+groups*48)} className="chart-svg" role="img" aria-label={total+" objects distributed across "+groups+" groups"}>{Array.from({length:groups},(_,g)=>{const count=each+(g<remainder?1:0);return <g key={g}><rect x="10" y={10+g*48} width="580" height="40" rx="9" className="group-box"/><text x="25" y={34+g*48} className="group-label">Group {g+1}</text>{Array.from({length:count},(_,i)=><circle key={i} cx={125+i*22} cy={30+g*48} r="7" className="array-dot"/>)}</g>})}</svg>}
+function AlgebraGraph({slope,intercept,selectedX}){const toX=x=>42+(x+10)*35.8,toY=y=>190-(y+10)*8.2,points=Array.from({length:81},(_,i)=>{const x=(i-40)/4;return [x,slope*x+intercept]}),d=points.map(([x,y],i)=>(i?"L":"M")+" "+toX(x).toFixed(1)+" "+toY(Math.max(-10,Math.min(10,y))).toFixed(1)).join(" "),y=slope*selectedX+intercept,clipped=Math.max(-10,Math.min(10,y));return <svg viewBox="0 0 800 390" className="chart-svg" role="img" aria-label={"Graph y = "+slope+"x + "+intercept}>{Array.from({length:11},(_,i)=>i*2).map(p=><g key={p}><line x1={toX(-10+p)} y1="22" x2={toX(-10+p)} y2="354" className="grid-line"/><line x1="42" y1={toY(-10+p)} x2="758" y2={toY(-10+p)} className="grid-line"/></g>)}<line x1="42" y1={toY(0)} x2="758" y2={toY(0)} className="axis-line"/><line x1={toX(0)} y1="22" x2={toX(0)} y2="354" className="axis-line"/><path d={d} className="algebra-line"/><circle cx={toX(selectedX)} cy={toY(clipped)} r="7" className="result-dot"/><text x={Math.min(690,toX(selectedX)+14)} y={Math.max(28,toY(clipped)-14)} className="point-label">({selectedX}, {y.toFixed(2)})</text><text x="766" y={toY(0)-8} className="axis-label">x</text><text x={toX(0)+8} y="20" className="axis-label">y</text><text x="400" y="382" className="plot-caption" textAnchor="middle">x: −10 to 10 · y clipped to visible range</text></svg>}
+function RectangleVisual({length,width,area}){const scale=Math.min(31,440/length,240/width),rw=length*scale,rh=width*scale,x=(600-rw)/2,y=(300-rh)/2;return <svg viewBox="0 0 600 330" className="chart-svg" role="img" aria-label={"Rectangle area "+area}><defs><pattern id="area-grid" width={scale} height={scale} patternUnits="userSpaceOnUse" x={x} y={y}><path d={"M "+scale+" 0 L 0 0 0 "+scale} fill="none" stroke="rgba(129,140,248,.6)" strokeWidth=".7"/></pattern></defs><rect x={x} y={y} width={rw} height={rh} rx="2" className="rectangle-fill"/><rect x={x} y={y} width={rw} height={rh} fill="url(#area-grid)" stroke="#8b8cf8" strokeWidth="2"/><text x="300" y={Math.max(18,y-12)} className="point-label" textAnchor="middle">Length = {length}</text><text x={x+rw/2} y={y+rh/2+6} className="area-label" textAnchor="middle">Area = {area}</text><text x="300" y="318" className="plot-caption" textAnchor="middle">Grid cells represent square units (schematic)</text></svg>}
+function Metric({label,value,detail}){return <div className="metric"><div className="metric-label">{label}</div><div className="metric-value">{value}</div><div className="metric-detail">{detail}</div></div>}
+export default function Home(){
+const [topic,setTopic]=useState("arithmetic"),[a,setA]=useState(3),[b,setB]=useState(5),[op,setOp]=useState("+"),[rows,setRows]=useState(4),[cols,setCols]=useState(5),[total,setTotal]=useState(24),[groups,setGroups]=useState(4),[slope,setSlope]=useState(2),[intercept,setIntercept]=useState(1),[selectedX,setSelectedX]=useState(3),[length,setLength]=useState(8),[width,setWidth]=useState(4);
+const result=op==="+"?a+b:a-b,product=rows*cols,quotient=Math.floor(total/groups),remainder=total%groups,area=length*width,graphY=slope*selectedX+intercept,active=topics.find(t=>t.id===topic);
+const steps=useMemo(()=>{if(topic==="arithmetic")return ["Start at "+a+" on the number line.",(op==="+"?"Add ":"Subtract ")+b+".","Result: "+a+" "+op+" "+b+" = "+result+"."];if(topic==="multiply")return ["Build "+rows+" equal rows.","Put "+cols+" dots in every row.","Count all dots: "+rows+" × "+cols+" = "+product+"."];if(topic==="divide")return ["Start with "+total+" objects.","Share them as evenly as possible into "+groups+" groups.","Each gets "+quotient+"; remainder "+remainder+"."];if(topic==="algebra")return ["Equation: y = "+slope+"x + "+intercept+".","Substitute x = "+selectedX+": y = "+slope+" × "+selectedX+" + ("+intercept+").","So y = "+graphY+"."];return ["Length = "+length+" units; width = "+width+" units.","Area = length × width.","Area = "+length+" × "+width+" = "+area+" square units."]},[topic,a,b,op,result,rows,cols,product,total,groups,quotient,remainder,slope,intercept,selectedX,graphY,length,width,area]);
+function reset(){setA(3);setB(5);setOp("+");setRows(4);setCols(5);setTotal(24);setGroups(4);setSlope(2);setIntercept(1);setSelectedX(3);setLength(8);setWidth(4)}
+const answer=topic==="arithmetic"?result:topic==="multiply"?product:topic==="divide"?quotient:topic==="algebra"?graphY.toFixed(2):area,detail=topic==="divide"?"remainder "+remainder:topic==="geometry"?"square units":topic==="algebra"?"selected y-value":"calculated result",method=topic==="arithmetic"?"Number line":topic==="multiply"?"Equal arrays":topic==="divide"?"Equal groups":topic==="algebra"?"Linear function":"Area formula";
+return <main className="app-shell"><header className="topbar"><a className="brand" href="#" aria-label="MathsLab home"><span className="brand-mark"><Sigma size={23}/></span><span><strong>MATHS<span className="brand-accent">LAB</span></strong><small>INTERACTIVE VISUALIZATION STUDIO</small></span></a><div className="top-status"><span className="status-light"/> CALCULATIONS LIVE <span className="top-divider"/><span>BUILD 1.0</span></div></header>
+<section className="hero"><div className="hero-copy"><div className="eyebrow"><Sparkles size={14}/> LEARN BY SEEING</div><h1>Make maths <span>make sense.</span></h1><p>Explore a sum, adjust the numbers, and see the maths unfold in real time.</p></div><div className="hero-mark" aria-hidden="true"><div className="hero-orbit orbit-one"/><div className="hero-orbit orbit-two"/><span>∑</span><i>+</i><b>×</b></div></section>
+<nav className="topic-tabs" aria-label="Math topics">{topics.map(({id,label,Icon})=><button key={id} className={topic===id?"topic-tab active":"topic-tab"} onClick={()=>setTopic(id)}><Icon size={16}/><span>{label}</span></button>)}</nav>
+<div className="dashboard-grid"><section className="card controls-card"><div className="card-heading"><div><span className="section-kicker">01 / INPUT</span><h2>Set your values</h2></div><button className="reset-button" onClick={reset}><RotateCcw size={14}/> Reset</button></div>
+{topic==="arithmetic"&&<><div className="operation-switch"><button className={op==="+"?"chosen":""} onClick={()=>setOp("+")}><Plus size={16}/> Addition</button><button className={op==="-"?"chosen":""} onClick={()=>setOp("-")}><Minus size={16}/> Subtraction</button></div><NumberInput label="First number (a)" value={a} onChange={setA} min={-50} max={50}/><NumberInput label="Second number (b)" value={b} onChange={setB} min={-50} max={50}/><div className="formula-preview"><span>YOUR SUM</span><strong>{a} {op} {b} <em>=</em> {result}</strong></div></>}
+{topic==="multiply"&&<><NumberInput label="Rows" value={rows} onChange={setRows} min={1} max={10}/><NumberInput label="Dots per row" value={cols} onChange={setCols} min={1} max={12}/><div className="formula-preview"><span>YOUR PRODUCT</span><strong>{rows} × {cols} <em>=</em> {product}</strong></div></>}
+{topic==="divide"&&<><NumberInput label="Total objects" value={total} onChange={setTotal} min={1} max={60}/><NumberInput label="Number of groups" value={groups} onChange={setGroups} min={1} max={12}/><div className="formula-preview"><span>YOUR DIVISION</span><strong>{total} ÷ {groups} <em>=</em> {quotient} <small>R {remainder}</small></strong></div></>}
+{topic==="algebra"&&<><NumberInput label="Slope (m)" value={slope} onChange={setSlope} min={-5} max={5} step={.5}/><NumberInput label="Y-intercept (c)" value={intercept} onChange={setIntercept} min={-10} max={10} step={.5}/><NumberInput label="Find y when x =" value={selectedX} onChange={setSelectedX} min={-10} max={10} step={.5}/><div className="formula-preview"><span>LINEAR EQUATION</span><strong>y = {slope}x + ({intercept})</strong></div></>}
+{topic==="geometry"&&<><NumberInput label="Length (units)" value={length} onChange={setLength} min={1} max={20}/><NumberInput label="Width (units)" value={width} onChange={setWidth} min={1} max={20}/><div className="formula-preview"><span>AREA</span><strong>{length} × {width} <em>=</em> {area}</strong></div></>}<div className="controls-foot"><CircleHelp size={14}/><span>Adjust any value to update the visualization instantly.</span></div></section>
+<section className="card visualization-card"><div className="card-heading"><div><span className="section-kicker">02 / VISUAL</span><h2>{active?.label}</h2></div><span className="live-badge"><Activity size={13}/> LIVE</span></div>
+<div className="plot-area">{topic==="arithmetic"&&<NumberLine a={a} b={b} op={op} result={result}/ >}{topic==="multiply"&&<div className="array-plot"><DotArray rows={rows} cols={cols}/></div>}{topic==="divide"&&<DivisionVisual total={total} groups={groups}/ >}{topic==="algebra"&&<AlgebraGraph slope={slope} intercept={intercept} selectedX={selectedX}/ >}{topic==="geometry"&&<RectangleVisual length={length} width={width} area={area}/ >}</div>
+<div className="plot-legend"><span><i className="legend-dot primary"/>{topic==="algebra"?"y = mx + c":topic==="geometry"?"Rectangle":topic==="divide"?"Objects per group":topic==="multiply"?"Each dot = 1":"Number movement"}</span><span className="legend-right">INTERACTIVE CANVAS</span></div><div className="metric-row"><Metric label="ANSWER" value={answer} detail={detail}/><Metric label="METHOD" value={method} detail="Visual explanation"/><Metric label="STATUS" value="Ready" detail="No external data needed"/></div></section></div>
+<section className="card solution-card"><div className="card-heading"><div><span className="section-kicker">03 / UNDERSTAND</span><h2>Step-by-step solution</h2></div><span className="steps-count">{steps.length} STEPS</span></div><div className="solution-steps">{steps.map((step,i)=><div className="solution-step" key={step}><span className="step-number">{String(i+1).padStart(2,"0")}</span><p>{step}</p>{i===steps.length-1&&<span className="done-mark">✓</span>}</div>)}</div></section>
+<footer className="app-footer"><span><span className="footer-mark">∑</span> MATHSLAB <span className="footer-muted">· Learn visually, one problem at a time.</span></span><span>CLIENT-SIDE CALCULATIONS <span className="footer-dot">●</span></span></footer></main>}
