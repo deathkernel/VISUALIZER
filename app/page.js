@@ -20,13 +20,20 @@ function NumberInput({label,value,onChange,min=-1000,max=1000,step=1}) {
  return <label className="number-field"><span>{label}</span><div className="number-control"><button type="button" onClick={()=>onChange(Math.max(min,Math.round((value-step)*100)/100))} aria-label={"Decrease "+label}>−</button><input type="number" min={min} max={max} step={step} value={value} onChange={e=>{if(e.target.value==="")return;const n=Number(e.target.value);if(Number.isFinite(n))onChange(Math.max(min,Math.min(max,n)));}}/><button type="button" onClick={()=>onChange(Math.min(max,Math.round((value+step)*100)/100))} aria-label={"Increase "+label}>+</button></div></label>
 }
 function Visual({topic,a,b,result}) {
- const max=Math.max(1,Math.abs(a),Math.abs(b),Math.abs(result));
+ // Answers can be formatted strings (for example "x = 2" or "12 area units").
+ // Extract a finite numeric value before using it in SVG geometry.
+ const resultMatch=String(result).match(/-?\\d+(?:\\.\\d+)?/);
+ const parsedResult=typeof result==="number"?result:Number(resultMatch?.[0]);
+ const visualResult=Number.isFinite(parsedResult)?parsedResult:0;
+ const safeA=Number.isFinite(Number(a))?Number(a):0;
+ const safeB=Number.isFinite(Number(b))?Number(b):0;
+ const max=Math.max(1,Math.abs(safeA),Math.abs(safeB),Math.abs(visualResult));
  if(topic==="geometry") {
   const w=180,h= Math.max(25,180*(Math.abs(b)/Math.max(1,Math.abs(a))));
   return <svg viewBox="0 0 420 250" className="chart-svg" role="img" aria-label="Rectangle area and perimeter visualization"><rect x={210-w/2} y={125-h/2} width={w} height={h} rx="3" className="rectangle-fill" stroke="#a7b8ff" strokeWidth="2"/><text x="210" y={125-h/2-12} textAnchor="middle" className="point-label">Length = {a}</text><text x={210+w/2+12} y="129" className="point-label">Width = {b}</text><text x="210" y="235" textAnchor="middle" className="plot-caption">Rectangle (not to scale)</text></svg>
  }
  const bar=(n,y,color,label)=><g key={label}><rect x="70" y={y} width={Math.max(3,260*Math.abs(n)/max)} height="30" rx="5" fill={color}/><text x="60" y={y+20} textAnchor="end" className="axis-label">{label}</text><text x={Math.min(355,78+260*Math.abs(n)/max)} y={y+20} className="point-label">{n}</text></g>;
- return <svg viewBox="0 0 420 200" className="chart-svg" role="img" aria-label={"Visual comparison for "+topic}><line x1="70" y1="20" x2="70" y2="170" className="axis-line"/>{bar(a,28,"#a7b8ff","A")}{bar(b,78,"#9bd7d0","B")}{bar(result,128,"#e8c38d","Result")}</svg>
+ return <svg viewBox="0 0 420 200" className="chart-svg" role="img" aria-label={"Visual comparison for "+topic}><line x1="70" y1="20" x2="70" y2="170" className="axis-line"/>{bar(safeA,28,"#a7b8ff","A")}{bar(safeB,78,"#9bd7d0","B")}{bar(visualResult,128,"#e8c38d","Result")}</svg>
 }
 export default function Home(){
  const [topic,setTopic]=useState("add"),[a,setA]=useState(12),[b,setB]=useState(4),[c,setC]=useState(3);
