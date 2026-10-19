@@ -1,34 +1,23 @@
-# VISUALIZER
+# MathsLab — Interactive Maths Visualizer
 
-> Write code. Watch it think.
+A dark, responsive maths learning dashboard built with Next.js and React. Change values and immediately see visualizations and solution steps.
 
-Visualizer is an interactive code execution visualizer. V1 focuses on a clean web IDE experience for step-by-step Python execution, variable inspection, execution controls, and a live visualization canvas.
+## Topics
+- Addition / subtraction — number-line movement
+- Multiplication — dot arrays
+- Division — equal groups with remainders
+- Algebra — graph of `y = mx + c`
+- Geometry — rectangle area
 
-## V1
-
-- Monaco-style code editor placeholder
-- Python code input
-- Run / Step / Reset controls
-- Current-line execution highlighting
-- Variable inspector
-- Execution timeline
-- Live visualization canvas
-- Console output
-- Dark developer-tool UI
-
-## Run
+## Run locally
+Requires Node.js LTS.
 
 ```bash
 npm install
 npm run dev
 ```
+Open http://localhost:3000.
 
-Then open http://localhost:3000
+For a production build run `npm run build` then `npm start`.
 
-## Roadmap
-
-1. Real Python tracing engine
-2. Arrays, loops, functions and call stack visualization
-3. Data structures: stack, queue, linked list, tree and graph
-4. Algorithm animations
-5. Multi-language execution
+Calculations are performed in the browser; no external data or API keys are required.

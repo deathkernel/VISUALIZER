@@ -1,274 +1,71 @@
 "use client";
+import { useMemo, useState } from "react";
+import { Sigma, Plus, Minus, X, Divide, Percent, Radical, Scale, Calculator, Shapes, ChartNoAxesCombined, RotateCcw, Activity } from "lucide-react";
 
-import { useEffect, useRef, useState } from "react";
-import Editor from "@monaco-editor/react";
-import { Play, RotateCcw, SkipForward, Terminal, Box, GitBranch, Braces, Zap, CircleDot } from "lucide-react";
-
-const defaultCode = `numbers = [5, 2, 8]\ntotal = 0\n\nfor number in numbers:\n    total = total + number\n\nprint(total)`;
-
-function VisualValue({ value }) {
-  const text = String(value);
-  const match = text.match(/^\[(.*)\]$/);
-
-  if (match) {
-    const items = match[1].trim() ? match[1].split(/,\s*/).map((item) => item.replace(/^['"]|['"]$/g, "")) : [];
-    return (
-      <div className="array-visual" aria-label={`Array with ${items.length} items`}>
-        {items.map((item, index) => (
-          <div className="array-node" key={`${item}-${index}`}>
-            <span className="array-index">{index}</span>
-            <strong>{item}</strong>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return <strong className="scalar-value">{text}</strong>;
+const topics = [
+ {id:"add",label:"Addition",group:"Arithmetic",Icon:Plus},
+ {id:"subtract",label:"Subtraction",group:"Arithmetic",Icon:Minus},
+ {id:"multiply",label:"Multiplication",group:"Arithmetic",Icon:X},
+ {id:"divide",label:"Division",group:"Arithmetic",Icon:Divide},
+ {id:"fraction",label:"Fractions",group:"Number skills",Icon:Sigma},
+ {id:"percent",label:"Percentages",group:"Number skills",Icon:Percent},
+ {id:"power",label:"Powers",group:"Number skills",Icon:Radical},
+ {id:"root",label:"Square roots",group:"Number skills",Icon:Radical},
+ {id:"ratio",label:"Ratios",group:"Number skills",Icon:Scale},
+ {id:"average",label:"Average",group:"Number skills",Icon:ChartNoAxesCombined},
+ {id:"algebra",label:"Linear equation",group:"Algebra",Icon:Calculator},
+ {id:"geometry",label:"Area & perimeter",group:"Geometry",Icon:Shapes}
+];
+function NumberInput({label,value,onChange,min=-1000,max=1000,step=1}) {
+ return <label className="number-field"><span>{label}</span><div className="number-control"><button type="button" onClick={()=>onChange(Math.max(min,Math.round((value-step)*100)/100))} aria-label={"Decrease "+label}>−</button><input type="number" min={min} max={max} step={step} value={value} onChange={e=>{if(e.target.value==="")return;const n=Number(e.target.value);if(Number.isFinite(n))onChange(Math.max(min,Math.min(max,n)));}}/><button type="button" onClick={()=>onChange(Math.min(max,Math.round((value+step)*100)/100))} aria-label={"Increase "+label}>+</button></div></label>
 }
-
-export default function Home() {
-  const [code, setCode] = useState(defaultCode);
-  const [steps, setSteps] = useState([]);
-  const [stepIndex, setStepIndex] = useState(0);
-  const [running, setRunning] = useState(false);
-  const [status, setStatus] = useState("Ready");
-  const [output, setOutput] = useState("");
-  const [error, setError] = useState("");
-  const editorRef = useRef(null);
-  const monacoRef = useRef(null);
-  const decorationRef = useRef([]);
-
-  const current = steps[stepIndex] || {
-    line: 1,
-    event: "Run your code to create execution steps",
-    variables: {},
-  };
-
-  async function runCode() {
-    setRunning(true);
-    setStatus("Executing…");
-    setError("");
-    setSteps([]);
-    setStepIndex(0);
-    setOutput("");
-
-    try {
-      const response = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code }),
-      });
-      const data = await response.json();
-
-      if (!data.ok) {
-        setError(data.error || "Execution failed");
-        setStatus("Error");
-        return;
-      }
-
-      setSteps(Array.isArray(data.steps) ? data.steps : []);
-      setOutput(typeof data.output === "string" ? data.output : String(data.output ?? ""));
-      setStatus(`Completed · ${Array.isArray(data.steps) ? data.steps.length : 0} steps`);
-    } catch (e) {
-      setError(e.message || "Could not connect to execution engine");
-      setStatus("Connection error");
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  function nextStep() {
-    if (steps.length) setStepIndex((i) => Math.min(i + 1, steps.length - 1));
-  }
-
-  function reset() {
-    setRunning(false);
-    setStepIndex(0);
-    setSteps([]);
-    setOutput("");
-    setError("");
-    setStatus("Ready");
-  }
-
-  function handleEditorMount(editor, monaco) {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
-
-    editor.addAction({
-      id: "visualizer-run-code",
-      label: "Run Visualizer Code",
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      run: runCode,
-    });
-
-    editor.focus();
-  }
-
-  useEffect(() => {
-    if (!editorRef.current || !monacoRef.current || !steps.length) return;
-
-    const editor = editorRef.current;
-    const monaco = monacoRef.current;
-    const line = Math.max(1, current.line || 1);
-
-    decorationRef.current = editor.deltaDecorations(decorationRef.current, [
-      {
-        range: new monaco.Range(line, 1, line, 1),
-        options: {
-          isWholeLine: true,
-          className: "execution-line",
-          glyphMarginClassName: "execution-glyph",
-        },
-      },
-    ]);
-
-    editor.revealLineInCenterIfOutsideViewport(line);
-  }, [current.line, steps.length]);
-
-  return (
-    <main className="shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark"><Zap size={17} /></div>
-          <div>
-            <div className="brand-name">VISUALIZER</div>
-            <div className="brand-tag">Write code. Watch it think.</div>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <span className="status-pill"><span className="status-dot" /> Python</span>
-          <button className="icon-button" onClick={reset} title="Reset"><RotateCcw size={17} /></button>
-        </div>
-      </header>
-
-      <section className="toolbar">
-        <button className="primary-button" onClick={runCode} disabled={running}>
-          <Play size={16} /> {running ? "Running…" : "Run"}
-        </button>
-        <button className="tool-button" onClick={nextStep} disabled={!steps.length}>
-          <SkipForward size={16} /> Step
-        </button>
-        <button className="tool-button" onClick={reset}>
-          <RotateCcw size={16} /> Reset
-        </button>
-        <div className="toolbar-spacer" />
-        <div className="step-counter">
-          {status}{steps.length ? ` · Step ${stepIndex + 1}/${steps.length}` : ""}
-        </div>
-      </section>
-
-      <section className="workspace">
-        <aside className="editor-panel panel">
-          <div className="panel-header">
-            <div className="panel-title"><Braces size={15} /> Code</div>
-            <span className="tiny-label">PYTHON</span>
-          </div>
-
-          <div className="monaco-editor-wrap">
-            <Editor
-              height="100%"
-              language="python"
-              theme="vs-dark"
-              value={code}
-              onChange={(value) => setCode(value ?? "")}
-              onMount={handleEditorMount}
-              options={{
-                automaticLayout: true,
-                minimap: { enabled: false },
-                fontSize: 13,
-                lineHeight: 21,
-                lineNumbers: "on",
-                glyphMargin: true,
-                folding: true,
-                tabSize: 4,
-                insertSpaces: true,
-                wordWrap: "off",
-                scrollBeyondLastLine: false,
-                smoothScrolling: true,
-                padding: { top: 12, bottom: 12 },
-                renderWhitespace: "selection",
-                bracketPairColorization: { enabled: true },
-                suggestOnTriggerCharacters: true,
-                quickSuggestions: true,
-                cursorBlinking: "smooth",
-                contextmenu: true,
-              }}
-            />
-          </div>
-
-          <div className="editor-footer">
-            <span>UTF-8</span>
-            <span>Python 3 · Ctrl+Enter to Run</span>
-          </div>
-        </aside>
-
-        <section className="visual-panel panel">
-          <div className="panel-header">
-            <div className="panel-title"><GitBranch size={15} /> Live Visualization</div>
-            <span className="live-pill"><CircleDot size={12} /> {running ? "RUNNING" : "LIVE"}</span>
-          </div>
-          <div className="visual-canvas">
-            <div className="event-banner">
-              <div className="event-kicker">CURRENT EVENT</div>
-              <div className="event-text">{current.event}</div>
-              <div className="event-line">{steps.length ? `Executing line ${current.line}` : "No execution yet"}</div>
-            </div>
-
-            <div className="flow-strip">
-              <div className="flow-label">EXECUTION FLOW</div>
-              <div className="flow-track">
-                {steps.length ? steps.slice(0, 8).map((step, index) => (
-                  <div className={`flow-node ${index === stepIndex ? "active" : ""}`} key={`${step.line}-${index}`}>
-                    <span>{index + 1}</span>
-                    <small>line {step.line}</small>
-                  </div>
-                )) : <div className="flow-empty">Run code to see the execution path.</div>}
-                {steps.length > 8 && <div className="flow-more">+{steps.length - 8}</div>}
-              </div>
-            </div>
-
-            <div className="array-card">
-              <div className="card-label">EXECUTION STATE</div>
-              <div className="state-grid">
-                {Object.entries(current.variables || {}).length ? Object.entries(current.variables).map(([key, value]) => (
-                  <div className="state-item" key={key}>
-                    <span>{key}</span>
-                    <VisualValue value={value} />
-                  </div>
-                )) : <div className="empty-state">Press Run to generate real execution states.</div>}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <aside className="inspector">
-          <div className="panel panel-grow">
-            <div className="panel-header"><div className="panel-title"><Box size={15} /> Variables</div></div>
-            <div className="variable-list">
-              {Object.entries(current.variables || {}).map(([key, value]) => (
-                <div className="variable-row" key={key}>
-                  <div className="variable-name">{key}</div>
-                  <div className="variable-value"><VisualValue value={value} /></div>
-                </div>
-              ))}
-              {!Object.keys(current.variables || {}).length && <div className="muted-note">Variables appear here after execution.</div>}
-            </div>
-          </div>
-          <div className="panel console-panel">
-            <div className="panel-header"><div className="panel-title"><Terminal size={15} /> Console</div></div>
-            <div className="console-body">
-              <div><span className="prompt">&gt;</span> python main.py</div>
-              {error ? <div className="error-result">{error}</div> : <div className="console-result">{output || "_"}</div>}
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      <footer className="footer">
-        <span>Visualizer V3 · Monaco Python Editor</span>
-        <span>5s execution limit</span>
-      </footer>
-    </main>
-  );
+function Visual({topic,a,b,result}) {
+ // Answers can be formatted strings (for example "x = 2" or "12 area units").
+ // Extract a finite numeric value before using it in SVG geometry.
+ const resultMatch=String(result).match(/-?\\d+(?:\\.\\d+)?/);
+ const parsedResult=typeof result==="number"?result:Number(resultMatch?.[0]);
+ const visualResult=Number.isFinite(parsedResult)?parsedResult:0;
+ const safeA=Number.isFinite(Number(a))?Number(a):0;
+ const safeB=Number.isFinite(Number(b))?Number(b):0;
+ const max=Math.max(1,Math.abs(safeA),Math.abs(safeB),Math.abs(visualResult));
+ if(topic==="geometry") {
+  const w=180,h= Math.max(25,180*(Math.abs(b)/Math.max(1,Math.abs(a))));
+  return <svg viewBox="0 0 420 250" className="chart-svg" role="img" aria-label="Rectangle area and perimeter visualization"><rect x={210-w/2} y={125-h/2} width={w} height={h} rx="3" className="rectangle-fill" stroke="#a7b8ff" strokeWidth="2"/><text x="210" y={125-h/2-12} textAnchor="middle" className="point-label">Length = {a}</text><text x={210+w/2+12} y="129" className="point-label">Width = {b}</text><text x="210" y="235" textAnchor="middle" className="plot-caption">Rectangle (not to scale)</text></svg>
+ }
+ const bar=(n,y,color,label)=><g key={label}><rect x="70" y={y} width={Math.max(3,260*Math.abs(n)/max)} height="30" rx="5" fill={color}/><text x="60" y={y+20} textAnchor="end" className="axis-label">{label}</text><text x={Math.min(355,78+260*Math.abs(n)/max)} y={y+20} className="point-label">{n}</text></g>;
+ return <svg viewBox="0 0 420 200" className="chart-svg" role="img" aria-label={"Visual comparison for "+topic}><line x1="70" y1="20" x2="70" y2="170" className="axis-line"/>{bar(safeA,28,"#a7b8ff","A")}{bar(safeB,78,"#9bd7d0","B")}{bar(visualResult,128,"#e8c38d","Result")}</svg>
+}
+export default function Home(){
+ const [topic,setTopic]=useState("add"),[a,setA]=useState(12),[b,setB]=useState(4),[c,setC]=useState(3);
+ const active=topics.find(t=>t.id===topic);
+ const calculation=useMemo(()=>{
+  const safeB=b===0?1:b;
+  if(topic==="add")return {formula:`${a} + ${b}`,answer:a+b,steps:[`Start with ${a}.`,`Add ${b} more.`,`Total: ${a} + ${b} = ${a+b}.`],note:"Combine both amounts."};
+  if(topic==="subtract")return {formula:`${a} − ${b}`,answer:a-b,steps:[`Start with ${a}.`,`Take away ${b}.`,`Difference: ${a} − ${b} = ${a-b}.`],note:"Find the difference."};
+  if(topic==="multiply")return {formula:`${a} × ${b}`,answer:a*b,steps:[`Make ${a} equal groups.`,`Put ${b} items in each group.`,`Total: ${a} × ${b} = ${a*b}.`],note:"Multiplication is repeated addition."};
+  if(topic==="divide")return {formula:`${a} ÷ ${safeB}`,answer:(a/safeB).toFixed(2).replace(/\.00$/,""),steps:[`Start with ${a} items.`,`Split them into ${safeB} equal groups.`,`Each group gets ${a/safeB}.`],note:b===0?"Division by zero is undefined.":"Share equally between groups."};
+  if(topic==="fraction"){const g=(x,y)=>y?g(y,x%y):Math.abs(x);const d=g(Math.round(a),Math.round(safeB))||1;return {formula:`${Math.round(a)}/${Math.round(safeB)}`,answer:`${Math.round(a)/d}/${Math.round(safeB)/d}`,steps:[`Numerator = ${Math.round(a)}; denominator = ${Math.round(safeB)}.`,`Find the greatest common divisor: ${d}.`,`Simplify both parts by ${d}: ${Math.round(a)/d}/${Math.round(safeB)/d}.`],note:"A fraction represents parts of a whole."};}
+  if(topic==="percent")return {formula:`${b}% of ${a}`,answer:(a*b/100).toFixed(2).replace(/\.00$/,""),steps:[`Convert ${b}% to a decimal: ${b}/100 = ${b/100}.`,`Multiply by the whole: ${a} × ${b/100}.`,`Answer: ${a} × ${b}/100 = ${a*b/100}.`],note:"Percent means per hundred."};
+  if(topic==="power")return {formula:`${a}^${Math.max(0,Math.min(8,Math.round(b))) }`,answer:Math.pow(a,Math.max(0,Math.min(8,Math.round(b)))),steps:[`Base = ${a}; exponent = ${Math.max(0,Math.min(8,Math.round(b)))}.`,`Multiply the base by itself ${Math.max(0,Math.min(8,Math.round(b)))} times.`,`Power = ${Math.pow(a,Math.max(0,Math.min(8,Math.round(b))))}.`],note:"The exponent tells how many factors to multiply."};
+  if(topic==="root"){const n=Math.max(0,a);return {formula:`√${n}`,answer:Math.sqrt(n).toFixed(3).replace(/0+$/,"").replace(/\.$/,""),steps:[`Find a number that multiplied by itself gives ${n}.`,`Check: √${n} × √${n} = ${n}.`,`Square root ≈ ${Math.sqrt(n).toFixed(3)}.`],note:"Only non-negative inputs are used for real square roots."};}
+  if(topic==="ratio"){const g=(x,y)=>y?g(y,x%y):Math.abs(x);const d=g(Math.round(a),Math.round(safeB))||1;return {formula:`${Math.round(a)} : ${Math.round(safeB)}`,answer:`${Math.round(a)/d} : ${Math.round(safeB)/d}`,steps:[`Write the ratio as ${Math.round(a)} : ${Math.round(safeB)}.`,`Find the greatest common divisor: ${d}.`,`Divide both terms by ${d} to simplify.`],note:"Ratios compare two quantities."};}
+  if(topic==="average"){const sum=a+b+c;return {formula:`(${a} + ${b} + ${c}) ÷ 3`,answer:(sum/3).toFixed(2).replace(/\.00$/,""),steps:[`Add the values: ${a} + ${b} + ${c} = ${sum}.`,`There are 3 values.`,`Mean = ${sum} ÷ 3 = ${sum/3}.`],note:"Average = sum of values ÷ number of values."};}
+  if(topic==="algebra"){const x=(c-a)/safeB;return {formula:`${b}x + ${a} = ${c}`,answer:`x = ${x.toFixed(3).replace(/0+$/,"").replace(/\.$/,"")}`,steps:[`Equation: ${b}x + ${a} = ${c}.`,`Subtract ${a} from both sides: ${b}x = ${c-a}.`,`Divide by ${safeB}: x = ${x}.`],note:b===0?"Coefficient cannot be zero for this solver.":"Do the same operation on both sides."};}
+  const area=Math.abs(a*b),perimeter=2*(Math.abs(a)+Math.abs(b));return {formula:`Area = ${a} × ${b}`,answer:`${area} area units · ${perimeter} perimeter units`,steps:[`Length = ${a}; width = ${b}.`,`Area = length × width = ${area}.`,`Perimeter = 2 × (length + width) = ${perimeter}.`],note:"Area measures the inside; perimeter measures the boundary."};
+ },[topic,a,b,c]);
+ function reset(){setA(12);setB(4);setC(3)}
+ const showC=topic==="average"||topic==="algebra";
+ const aLabel=topic==="root"?"Number":topic==="geometry"?"Length":topic==="average"?"Value 1":topic==="algebra"?"Constant (a)":"First value";
+ const bLabel=topic==="percent"?"Percent":topic==="algebra"?"Coefficient (b)":topic==="geometry"?"Width":topic==="average"?"Value 2":topic==="power"?"Exponent":topic==="fraction"?"Denominator":topic==="ratio"?"Second term":"Second value";
+ return <main className="app-shell">
+  <header className="topbar"><a className="brand" href="#"><span className="brand-mark"><Sigma size={20}/></span><span><strong>MATHS<span className="brand-accent">LAB</span></strong><small>INTERACTIVE MATHS STUDIO</small></span></a><div className="top-status"><span className="status-light"/> CALCULATIONS LIVE <span className="top-divider"/><span>LOCAL MATHS</span></div></header>
+  <section className="hero"><div><div className="eyebrow">LEARN BY SEEING</div><h1>Every sum, <span>made clearer.</span></h1><p>Choose a topic, change the numbers, and follow the solution step by step.</p></div></section>
+  <section className="topic-section"><div className="topic-heading"><div><span className="section-kicker">EXPLORE TOPICS</span><h2>What do you want to solve?</h2></div><span className="topic-count">12 TOPICS</span></div><div className="topic-grid">{topics.map(({id,label,group,Icon})=><button key={id} onClick={()=>setTopic(id)} className={topic===id?"topic-choice selected":"topic-choice"}><span className="topic-icon"><Icon size={17}/></span><span className="topic-name">{label}</span><span className="topic-arrow">↗</span></button>)}</div></section>
+  <div className="workspace"><section className="card controls-card"><div className="card-heading"><div><span className="section-kicker">01 / INPUT</span><h2>{active.label}</h2></div><button className="reset-button" onClick={reset}><RotateCcw size={13}/> Reset</button></div>
+   <div className="input-stack"><NumberInput label={aLabel} value={a} onChange={setA} min={topic==="root"?0:-1000} max={1000}/><NumberInput label={bLabel} value={b} onChange={setB} min={topic==="fraction"||topic==="ratio"||topic==="divide"||topic==="percent"?1:-100} max={1000} step={topic==="percent"?.5:1}/>{showC&&<NumberInput label={topic==="average"?"Value 3":"Right-hand side (c)"} value={c} onChange={setC}/>}</div>
+   <div className="formula-preview"><span>FORMULA</span><strong>{calculation.formula}</strong><div className="answer-line"><span>ANSWER</span><b>{calculation.answer}</b></div></div><p className="hint-text">{calculation.note}</p>
+  </section><section className="card visualization-card"><div className="card-heading"><div><span className="section-kicker">02 / VISUAL</span><h2>{active.label} visualizer</h2></div><span className="live-badge"><Activity size={12}/> LIVE</span></div><div className="plot-area"><Visual topic={topic} a={a} b={b} result={calculation.answer}/></div><div className="plot-legend"><span><i className="legend-dot primary"/>{topic==="geometry"?"Shape preview":"Value comparison"}</span><span className="legend-right">UPDATES WITH INPUT</span></div></section></div>
+  <section className="card solution-card"><div className="card-heading"><div><span className="section-kicker">03 / UNDERSTAND</span><h2>Step-by-step solution</h2></div><span className="steps-count">3 STEPS</span></div><div className="solution-steps">{calculation.steps.map((step,i)=><div className="solution-step" key={i}><span className="step-number">{String(i+1).padStart(2,"0")}</span><p>{step}</p>{i===2&&<span className="done-mark">✓</span>}</div>)}</div></section>
+  <footer className="app-footer"><span><span className="footer-mark">∑</span> MATHSLAB <span className="footer-muted">· Learn visually, one problem at a time.</span></span><span>CLIENT-SIDE CALCULATIONS <span className="footer-dot">●</span></span></footer>
+ </main>
 }
